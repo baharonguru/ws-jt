@@ -1,0 +1,16 @@
+venv/
+.venv/
+
+# Python build & package metadata
+*.egg-info/
+build/
+dist/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+
+# OS Files
+.DS_Store
