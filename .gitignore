@@ -1,5 +1,6 @@
 venv/
 .venv/
+.env
 
 # Python build & package metadata
 *.egg-info/
