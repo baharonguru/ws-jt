@@ -1,0 +1,14 @@
+[
+  {
+    "provider": "lever",
+    "company": "replace-with-a-lever-site-slug"
+  },
+  {
+    "provider": "greenhouse",
+    "company": "replace-with-a-greenhouse-board-token"
+  },
+  {
+    "provider": "personio",
+    "company": "replace-with-a-personio-company-subdomain"
+  }
+]

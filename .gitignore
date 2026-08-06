@@ -1,6 +1,7 @@
 venv/
 .venv/
 .env
+config/sources.json
 
 # Python build & package metadata
 *.egg-info/

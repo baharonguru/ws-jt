@@ -47,6 +47,14 @@ def test_filter_rejects_job_without_target_role() -> None:
     assert result == []
 
 
+def test_filter_rejects_non_technical_werkstudent_role() -> None:
+    job = make_job(title="Werkstudent Marketing", location="Leipzig, Germany")
+
+    result = filter_matching_jobs([job])
+
+    assert result == []
+
+
 def test_filter_rejects_job_outside_target_location() -> None:
     job = make_job(location="Munich, Germany")
 

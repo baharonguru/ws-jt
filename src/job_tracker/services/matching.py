@@ -9,11 +9,39 @@ class JobFilterCriteria(BaseModel):
     """The rules used to decide whether a job is worth tracking."""
 
     role_keywords: tuple[str, ...] = ("werkstudent",)
+    technical_keywords: tuple[str, ...] = (
+        "software",
+        "informatik",
+        "computer science",
+        "data",
+        "analytics",
+        "developer",
+        "development",
+        "engineering",
+        "backend",
+        "frontend",
+        "full stack",
+        "full-stack",
+        "machine learning",
+        "künstliche intelligenz",
+        "artificial intelligence",
+        "cloud",
+        "devops",
+        "platform",
+        "cybersecurity",
+        "security",
+        "python",
+        "java",
+        "sql",
+        "test automation",
+        "qa",
+    )
     preferred_location_keywords: tuple[str, ...] = ("leipzig", "berlin")
     remote_keywords: tuple[str, ...] = ("fully remote", "remote", "homeoffice", "home office")
 
     @field_validator(
         "role_keywords",
+        "technical_keywords",
         "preferred_location_keywords",
         "remote_keywords",
     )
@@ -37,7 +65,7 @@ def filter_matching_jobs(
     """
     Return matching jobs ordered by the user's preference.
 
-    A role keyword may appear in the title or description.
+    Role and technical keywords may appear in the title or description.
     A job is eligible when it is remote, or when its location is Leipzig or Berlin.
     Results are ordered: remote, Leipzig, then Berlin.
     """
@@ -63,9 +91,13 @@ def matches_job(job: Job, criteria: JobFilterCriteria) -> bool:
 
     remote_searchable_text = f"{job.location} {searchable_job_text}"
 
-    return contains_any(searchable_job_text, criteria.role_keywords) and (
+    return (
+        contains_any(searchable_job_text, criteria.role_keywords)
+        and contains_any(searchable_job_text, criteria.technical_keywords)
+        and (
         contains_any(remote_searchable_text, criteria.remote_keywords)
         or contains_any(job.location, criteria.preferred_location_keywords)
+        )
     )
 
 
