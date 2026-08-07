@@ -1,0 +1,55 @@
+name: Run Job Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      sources_json:
+        description: "JSON array of ATS sources"
+        required: true
+        type: string
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: job_tracker
+          POSTGRES_PASSWORD: local_dev_password
+          POSTGRES_DB: job_tracker
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U job_tracker -d job_tracker"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      POSTGRES_USER: job_tracker
+      POSTGRES_PASSWORD: local_dev_password
+      POSTGRES_DB: job_tracker
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      SOURCES_JSON: ${{ inputs.sources_json }}
+      SMARTRECRUITERS_API_KEY: ${{ secrets.SMARTRECRUITERS_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install .
+      - run: python -m alembic upgrade head
+
+      - name: Create runtime source configuration
+        run: |
+          mkdir -p config
+          printf '%s' "$SOURCES_JSON" > config/sources.json
+
+      - run: python -m job_tracker.cli.run_pipeline

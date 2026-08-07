@@ -10,18 +10,14 @@ from job_tracker.config import get_settings
 
 @lru_cache
 def get_engine() -> Engine:
-    """Create one reusable database engine per Python process."""
-    settings = get_settings()
-
     return create_engine(
-        settings.database_url,
+        get_settings().database_url,
         pool_pre_ping=True,
     )
 
 
 @lru_cache
 def get_session_factory() -> sessionmaker[Session]:
-    """Create sessions bound to the application database engine."""
     return sessionmaker(
         bind=get_engine(),
         autoflush=False,
@@ -29,16 +25,19 @@ def get_session_factory() -> sessionmaker[Session]:
     )
 
 
+def get_db_session() -> Generator[Session, None, None]:
+    """FastAPI dependency: one read session per request."""
+    session = get_session_factory()()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
 @contextmanager
 def session_scope() -> Generator[Session, None, None]:
-    """
-    Provide a transaction-safe database session.
-
-    Successful work commits automatically.
-    Any exception rolls the transaction back.
-    """
+    """Transactional session for the ingestion pipeline."""
     session = get_session_factory()()
-
     try:
         yield session
         session.commit()

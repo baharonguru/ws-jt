@@ -1,25 +1,18 @@
 from collections.abc import Iterable
 
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from job_tracker.db.models import JobRecord
-from job_tracker.models import Job
+from job_tracker.models import AtsProvider, Job
 
 
 class JobRepository:
-    """Database operations for tracked job listings."""
-
     def __init__(self, session: Session) -> None:
         self.session = session
 
     def save_if_new(self, job: Job) -> JobRecord | None:
-        """
-        Insert a job only when its ATS source and source ID have not been seen.
-
-        PostgreSQL performs this atomically, so a concurrent pipeline run cannot
-        create a duplicate listing.
-        """
         statement = (
             insert(JobRecord)
             .values(
@@ -41,5 +34,32 @@ class JobRepository:
         return self.session.get(JobRecord, record_id) if record_id is not None else None
 
     def save_all_if_new(self, jobs: Iterable[Job]) -> list[JobRecord]:
-        """Store a sequence of jobs and return only the records newly inserted."""
         return [record for job in jobs if (record := self.save_if_new(job)) is not None]
+
+    def list_jobs(
+        self,
+        *,
+        query: str | None = None,
+        location: str | None = None,
+        source: AtsProvider | None = None,
+        limit: int = 50,
+    ) -> list[JobRecord]:
+        statement = select(JobRecord).order_by(JobRecord.first_seen_at.desc()).limit(limit)
+
+        if query:
+            pattern = f"%{query.strip()}%"
+            statement = statement.where(
+                or_(
+                    JobRecord.title.ilike(pattern),
+                    JobRecord.company.ilike(pattern),
+                    JobRecord.description.ilike(pattern),
+                )
+            )
+
+        if location:
+            statement = statement.where(JobRecord.location.ilike(f"%{location.strip()}%"))
+
+        if source:
+            statement = statement.where(JobRecord.source == source.value)
+
+        return list(self.session.scalars(statement))

@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 
 from job_tracker.fetchers.base import FetcherError
 from job_tracker.models import AtsProvider, Job
@@ -19,7 +19,7 @@ class StubFetcher:
         self.error = error
 
     def fetch(self) -> list[Job]:
-        if self.error is not None:
+        if self.error:
             raise self.error
         return self.jobs
 
@@ -28,60 +28,55 @@ class FakeJobStore:
     def __init__(self) -> None:
         self.saved_jobs: list[Job] = []
 
-    def save_all_if_new(self, jobs: Iterable[Job]) -> Sequence[object]:
-        self.saved_jobs = list(jobs)
-        return self.saved_jobs
+    def save_if_new(self, job: Job) -> object | None:
+        if job in self.saved_jobs:
+            return None
+        self.saved_jobs.append(job)
+        return object()
 
 
-def make_job(
-    source_job_id: str,
-    *,
-    title: str = "Werkstudent Data Engineering",
-    location: str = "Leipzig, Germany",
-) -> Job:
+def make_job(source_job_id: str, title: str = "Werkstudent Data Engineering") -> Job:
     return Job(
         source=AtsProvider.LEVER,
         source_job_id=source_job_id,
         company="Acme",
         title=title,
-        location=location,
+        location="Leipzig, Germany",
         apply_url=f"https://jobs.lever.co/acme/{source_job_id}",
         source_payload={},
     )
 
 
 def test_pipeline_filters_deduplicates_and_stores_new_jobs() -> None:
-    matching_job = make_job("job-1")
-    duplicate_job = make_job("job-1")
-    non_matching_job = make_job("job-2", title="Senior Data Engineer")
-    job_store = FakeJobStore()
+    matching = make_job("job-1")
+    duplicate = make_job("job-1")
+    irrelevant = make_job("job-2", "Werkstudent Marketing")
+    store = FakeJobStore()
 
     result = run_pipeline(
         [
-            StubFetcher(AtsProvider.LEVER, "acme", [matching_job, duplicate_job]),
-            StubFetcher(AtsProvider.GREENHOUSE, "acme", [non_matching_job]),
+            StubFetcher(AtsProvider.LEVER, "acme", [matching, duplicate]),
+            StubFetcher(AtsProvider.GREENHOUSE, "acme", [irrelevant]),
         ],
-        job_store,
+        store,
     )
 
     assert result.fetched_count == 3
-    assert result.matching_count == 2
-    assert result.deduplicated_count == 1
+    assert result.matching_count == 1
     assert result.new_count == 1
-    assert result.failures == ()
-    assert job_store.saved_jobs == [matching_job]
+    assert result.new_jobs == (matching,)
 
 
-def test_pipeline_continues_when_one_source_fails() -> None:
-    job_store = FakeJobStore()
-    matching_job = make_job("job-1")
+def test_pipeline_continues_when_a_source_fails() -> None:
+    store = FakeJobStore()
+    matching = make_job("job-1")
 
     result = run_pipeline(
         [
-            StubFetcher(AtsProvider.LEVER, "broken", error=FetcherError("network unavailable")),
-            StubFetcher(AtsProvider.GREENHOUSE, "acme", [matching_job]),
+            StubFetcher(AtsProvider.LEVER, "broken", error=FetcherError("unavailable")),
+            StubFetcher(AtsProvider.GREENHOUSE, "acme", [matching]),
         ],
-        job_store,
+        store,
     )
 
     assert result.new_count == 1

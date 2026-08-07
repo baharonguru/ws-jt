@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -12,9 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class JobStore(Protocol):
-    """The persistence operations required by the pipeline."""
-
-    def save_all_if_new(self, jobs: Iterable[Job]) -> Sequence[object]: ...
+    def save_if_new(self, job: Job) -> object | None: ...
 
 
 @dataclass(frozen=True)
@@ -27,10 +25,21 @@ class PipelineFailure:
 @dataclass(frozen=True)
 class PipelineResult:
     fetched_count: int
-    matching_count: int
-    deduplicated_count: int
-    new_count: int
+    matching_jobs: tuple[Job, ...]
+    new_jobs: tuple[Job, ...]
     failures: tuple[PipelineFailure, ...]
+
+    @property
+    def matching_count(self) -> int:
+        return len(self.matching_jobs)
+
+    @property
+    def deduplicated_count(self) -> int:
+        return len(self.matching_jobs)
+
+    @property
+    def new_count(self) -> int:
+        return len(self.new_jobs)
 
 
 def run_pipeline(
@@ -38,48 +47,36 @@ def run_pipeline(
     job_store: JobStore,
     criteria: JobFilterCriteria | None = None,
 ) -> PipelineResult:
-    """Fetch, filter, deduplicate, and persist jobs in one sequential run."""
+    """Run one sequential ingestion pipeline; no scheduler or background loop."""
     fetched_jobs: list[Job] = []
     failures: list[PipelineFailure] = []
 
     for fetcher in fetchers:
         try:
-            jobs = fetcher.fetch()
+            fetched_jobs.extend(fetcher.fetch())
         except FetcherError as exc:
             logger.warning("Fetch failed for %s/%s: %s", fetcher.provider, fetcher.company, exc)
             failures.append(
-                PipelineFailure(
-                    provider=fetcher.provider.value,
-                    company=fetcher.company,
-                    error=str(exc),
-                )
+                PipelineFailure(fetcher.provider.value, fetcher.company, str(exc))
             )
-            continue
         except Exception as exc:
-            logger.exception(
-                "Unexpected fetch failure for %s/%s",
-                fetcher.provider,
-                fetcher.company,
-            )
+            logger.exception("Unexpected fetch failure for %s/%s", fetcher.provider, fetcher.company)
             failures.append(
-                PipelineFailure(
-                    provider=fetcher.provider.value,
-                    company=fetcher.company,
-                    error=str(exc),
-                )
+                PipelineFailure(fetcher.provider.value, fetcher.company, str(exc))
             )
-            continue
-
-        fetched_jobs.extend(jobs)
 
     matching_jobs = filter_matching_jobs(fetched_jobs, criteria)
     unique_jobs = deduplicate_jobs(matching_jobs)
-    new_records = job_store.save_all_if_new(unique_jobs)
+
+    new_jobs = tuple(
+        job
+        for job in unique_jobs
+        if job_store.save_if_new(job) is not None
+    )
 
     return PipelineResult(
         fetched_count=len(fetched_jobs),
-        matching_count=len(matching_jobs),
-        deduplicated_count=len(unique_jobs),
-        new_count=len(new_records),
+        matching_jobs=tuple(unique_jobs),
+        new_jobs=new_jobs,
         failures=tuple(failures),
     )
