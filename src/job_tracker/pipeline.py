@@ -60,7 +60,9 @@ def run_pipeline(
                 PipelineFailure(fetcher.provider.value, fetcher.company, str(exc))
             )
         except Exception as exc:
-            logger.exception("Unexpected fetch failure for %s/%s", fetcher.provider, fetcher.company)
+            logger.exception(
+                "Unexpected fetch failure for %s/%s", fetcher.provider, fetcher.company
+                )
             failures.append(
                 PipelineFailure(fetcher.provider.value, fetcher.company, str(exc))
             )

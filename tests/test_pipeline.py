@@ -1,4 +1,3 @@
-from collections.abc import Iterable
 
 from job_tracker.fetchers.base import FetcherError
 from job_tracker.models import AtsProvider, Job
